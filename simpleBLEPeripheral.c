@@ -935,6 +935,16 @@ static void simpleProfileChangeCB( uint8 paramID )
          break;
          
   case A:
+    for(uint i=1;i<19;i++)
+    {
+      if(buf[i]==',') break;
+      user_new.name=buf[i];  
+    }
+    for(uint n=i+1;n<=i+6;n++)
+    {
+      Passcode_V=Passcode_V*10+(buf[i]-'0');
+      uer_new.passcode=Passcode_V;
+    }
     
     create(user user_new)    // 创建用户
     {

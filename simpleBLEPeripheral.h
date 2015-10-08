@@ -105,7 +105,7 @@ typedef struct admin_0x82    //管理员结构体
 
 typedef struct user_0x8x
 {
-    uint8 name[15];
+    uint8 name[16];
     uint32 password;
     
 }user
