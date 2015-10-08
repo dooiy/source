@@ -85,30 +85,30 @@ extern uint16 SimpleBLEPeripheral_ProcessEvent( uint8 task_id, uint16 events );
 
 /*********************************************************************
 *********************************************************************/
-# define MAXPASS 20
-typedef struct Change_0x80
+#define MAXPASS 20
+typedef struct //Change_0x80
 {
   uint32 passcode;
   uint8 changed;
-}peidui
+}peidui;
 
-typedef struct Flag_0x81     //标识 是否存在用户
+typedef struct //Flag_0x81     //标识 是否存在用户
 {
     uint8 flag[MAXPASS]; //存在数组，是否存在用户
-}flag
+}flag;
 
-typedef struct admin_0x82    //管理员结构体
+typedef struct //admin_0x82    //管理员结构体
 {
     uint8 name[15];
-    uint8 password[6];
-}admin
+    uint32 password;
+}admin;
 
-typedef struct user_0x8x
+typedef struct //user_0x8x
 {
-    uint8 name[16];
+    uint8 name[13];
     uint32 password;
     
-}user
+}user;
 #ifdef __cplusplus
 }
 #endif

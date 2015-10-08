@@ -166,6 +166,8 @@
 /*********************************************************************
  * LOCAL VARIABLES
  */
+static uint8 access=0;
+static uint8 admin_access=0;
 static uint8 simpleBLEPeripheral_TaskID;   // Task ID for internal task/event processing
 static gaprole_States_t gapProfileState = GAPROLE_INIT;
 //static uint8 wzc=0xB0;
@@ -459,13 +461,21 @@ Motor_EN=0;
   // Setup a delayed profile startup
   
   flag flag_new;
-  if(osal_snv_read(0x81, sizeof(flag), &flag_new)!=success)//读取密码状态表，失败则如下
+  admin admin_new={"admin,",123456};
+  if(osal_snv_read(0x81, sizeof(flag), &flag_new)!=SUCCESS)//读取密码状态表，失败则初始化
   {
             
-                flag_new[0]=1;      //首密码为管理员密码
-                for(uint i = 1; i<MAXPASS ; i++) //赋初值为0
-                flag_new.flag[j]=0;
-                osal_snv_write(0x81, sizeof(user), &flag_new);
+                flag_new.flag[0]=1;      //首密码为管理员密码
+                for(uint8 i = 1; i<MAXPASS ; i++) //其他赋初值为0
+                {
+                  flag_new.flag[i]=0;
+                  osal_snv_write(0x81, sizeof(flag), &flag_new);
+                }
+                
+                osal_snv_write(0x82, sizeof(admin), &admin_new);
+
+                
+                
   }
   
   
@@ -755,6 +765,8 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         #if (defined HAL_LCD) && (HAL_LCD == TRUE)
           HalLcdWriteString( "Advertising",  HAL_LCD_LINE_3 );
         #endif // (defined HAL_LCD) && (HAL_LCD == TRUE)
+          access=0;      //清除权限
+          admin_access=0;      
       }
       break;
 
@@ -860,7 +872,6 @@ static void simpleProfileChangeCB( uint8 paramID )
   uint8 sus[7]="success";
   uint8 fai[6]="failed";
   uint8 newChar7Value[SIMPLEPROFILE_CHAR7_LEN];
-  uint8 access=0;
   uint32 Passcode_V;
   user user_new;
   flag flag_new;
@@ -894,31 +905,31 @@ static void simpleProfileChangeCB( uint8 paramID )
      SimpleProfile_GetParameter(SIMPLEPROFILE_CHAR6,&buf);
      
     
-     switch buf[0]
-       case: V    //进行密码校验
+     switch (buf[0])
+  case  'v'  :           //进行密码校验
          
-         for(uint j=1;j<7;j++) //数组密码转uint32格式
+         for(uint8 j=1;j<7;j++) //数组密码转uint32格式
            {
-             Passcode_V=Passcode_V*10+(buf[i]-'0');
+             Passcode_V=Passcode_V*10+(buf[j]-'0');
            }
      
-         verify(uint32 Password_V) //验证
-         {
+                                            //验证
+        
            
            
                 
-                for(uint j = 0; j<MAXPASS ; j++)
+                for(uint8 j = 0; j<MAXPASS ; j++)
                   {
                      if(flag_new.flag[j]) //该处存在有效密码
                     {
                           
-                          osal_snv_read(0x82+j, sizeof(user), &user_new)!=success;
-                          if(Password_V  == user_new.password) //密码正确
+                          osal_snv_read(0x82+j, sizeof(user), &user_new);
+                          if(Passcode_V  == user_new.password) //密码正确
                           {
                         
                              SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,7, &sus);
-                             access＝1；               //允许接入
-                             break；
+                             access=1;
+                             break;
                            }
               
             
@@ -931,39 +942,46 @@ static void simpleProfileChangeCB( uint8 paramID )
           {
              SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,6, &fai); //返回失败
           }
-       }
+       
          break;
          
-  case A:
-    for(uint i=1;i<19;i++)
+  case 'A' :
+    for(uint8 i=1;i<19;i++)
     {
-      if(buf[i]==',') break;
-      user_new.name=buf[i];  
+       
+      user_new.name[i]=buf[i]; 
+      if(buf[i]==',')
+      {
+        uint8 n=i+1;
+      break;
+      }
     }
-    for(uint n=i+1;n<=i+6;n++)
+    for(;n<i+7;n++)
     {
-      Passcode_V=Passcode_V*10+(buf[i]-'0');
-      uer_new.passcode=Passcode_V;
+      Passcode_V=Passcode_V*10+(buf[n]-'0');
+      user_new.password=Passcode_V;
     }
     
-    create(user user_new)    // 创建用户
-    {
+        // 创建用户
+    
         
-       osal_snv_read(0x81, sizeof(flag), &flag_new)
+       osal_snv_read(0x81, sizeof(flag), &flag_new);
       
         
-        for(uint j = 0; j<=MAXPASS ; j++)
+        for(uint8 j = 0; j<=MAXPASS ; j++)
         {
             if (flag_new.flag[j]==0)
             {
                 osal_snv_write(0x82+j, sizeof(user), &user_new);
                 flag_new.flag[j]=1;
                 osal_snv_write(0x81, sizeof(flag), &flag_new);
+                SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,7, &sus);
+
                   break;
             }
             
         }
-    }
+    
     break;
     
     
