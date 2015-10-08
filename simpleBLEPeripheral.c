@@ -459,12 +459,13 @@ Motor_EN=0;
   // Setup a delayed profile startup
   
   flag flag_new;
-  osal_snv_read(0x81, sizeof(flag), &flag_new)!=success//读取密码状态表，失败则如下
+  if(osal_snv_read(0x81, sizeof(flag), &flag_new)!=success)//读取密码状态表，失败则如下
   {
             
                 flag_new[0]=1;      //首密码为管理员密码
                 for(uint i = 1; i<MAXPASS ; i++) //赋初值为0
                 flag_new.flag[j]=0;
+                osal_snv_write(0x81, sizeof(user), &flag_new);
   }
   
   
@@ -937,25 +938,23 @@ static void simpleProfileChangeCB( uint8 paramID )
     
     create(user user_new)    // 创建用户
     {
-        flag flag_new;
         
-        if(osal_snv_read(0x81, sizeof(flag), &flag_new)!=success)
-        {
-          for(uint i = 0; j<=MAXPASS ; j++)
-          flag_new.flag[j]=0;
-        }
+       osal_snv_read(0x81, sizeof(flag), &flag_new)
+      
         
-        for(uint j = 2; j<=MAXPASS ; j++)
+        for(uint j = 0; j<=MAXPASS ; j++)
         {
             if (flag_new.flag[j]==0)
             {
-                osal_snv_write(0x80+j, sizeof(user), &user_new);
+                osal_snv_write(0x82+j, sizeof(user), &user_new);
                 flag_new.flag[j]=1;
-                osal_write(ox80,&a)
+                osal_snv_write(0x81, sizeof(flag), &flag_new);
+                  break;
             }
             
         }
     }
+    break;
     
     
 
