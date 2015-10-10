@@ -53,7 +53,7 @@
 #include "hal_key.h"
 #include "hal_lcd.h"
 #include "hal_uart.h"
-
+#include "Osal_snv.h"
 #include "gatt.h"
 
 #include "hci.h"
@@ -461,7 +461,7 @@ Motor_EN=0;
   // Setup a delayed profile startup
   
   flag flag_new;
-  admin admin_new={"admin,",123456};
+  user user_admin={"admin,",123456};
   if(osal_snv_read(0x81, sizeof(flag), &flag_new)!=SUCCESS)//读取密码状态表，失败则初始化
   {
             
@@ -469,10 +469,11 @@ Motor_EN=0;
                 for(uint8 i = 1; i<MAXPASS ; i++) //其他赋初值为0
                 {
                   flag_new.flag[i]=0;
-                  osal_snv_write(0x81, sizeof(flag), &flag_new);
                 }
+                osal_snv_write(0x81, sizeof(flag), &flag_new);
                 
-                osal_snv_write(0x82, sizeof(admin), &admin_new);
+                
+                osal_snv_write(0x82, sizeof(user), &user_admin);
 
                 
                 
@@ -871,10 +872,15 @@ static void simpleProfileChangeCB( uint8 paramID )
   uint8 buf[19];
   uint8 sus[7]="success";
   uint8 fai[6]="failed";
+  uint8 clear[5]="clear";
   uint8 newChar7Value[SIMPLEPROFILE_CHAR7_LEN];
-  uint32 Passcode_V;
+  uint32 Passcode_V=0;
   user user_new;
   flag flag_new;
+  uint8 n;
+  uint8 i;
+  uint8 v=0;
+  uint8 deleteID;
   switch( paramID )
   {
     case SIMPLEPROFILE_CHAR1:
@@ -900,89 +906,110 @@ static void simpleProfileChangeCB( uint8 paramID )
       #endif // (defined HAL_LCD) && (HAL_LCD == TRUE)
 
       break;
-    case SIMPLEPROFILE_CHAR6:
-     
-     SimpleProfile_GetParameter(SIMPLEPROFILE_CHAR6,&buf);
-     
-    
-     switch (buf[0])
-  case  'v'  :           //进行密码校验
-         
+   
+  case SIMPLEPROFILE_CHAR6:
+    {
+     SimpleProfile_GetParameter(SIMPLEPROFILE_CHAR6,&buf);   //1.进行密码校验格式为v123456   2.创建新用户格式为uwzc,654321
+     if (buf[0]=='v')//当6信道口发送的第一个字符为v 进行密码校验
+     {
          for(uint8 j=1;j<7;j++) //数组密码转uint32格式
            {
              Passcode_V=Passcode_V*10+(buf[j]-'0');
            }
-     
-                                            //验证
-        
-           
-           
-                
-                for(uint8 j = 0; j<MAXPASS ; j++)
-                  {
-                     if(flag_new.flag[j]) //该处存在有效密码
+         osal_snv_read(0x81, sizeof(flag), &flag_new);//0x81中存着一个flag【20】的数组，第n位为1说明这个位有密码，为0则没有密码
+         for(uint8 j = 0; j<MAXPASS ; j++)
+            {
+              if(flag_new.flag[j]) //该处存在有效密码
+                {
+                  osal_snv_read(0x82+j, sizeof(user), &user_new);//读取密码
+                  if(Passcode_V  == user_new.password) //密码正确
                     {
-                          
-                          osal_snv_read(0x82+j, sizeof(user), &user_new);
-                          if(Passcode_V  == user_new.password) //密码正确
-                          {
-                        
-                             SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,7, &sus);
-                             access=1;
-                             break;
-                           }
+                      SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,7, &sus);//向信道7传输SUCCESS
+                      access=1;                             //本次允许接入
+                      v=1;
+                      break;
+                     }
               
             
                         
-                    }
+                }
                     
-               }
+            }
     
-          if (access==0)
+          if (v==0|access==0)//判断完所有密码全部错误
           {
              SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,6, &fai); //返回失败
+             access=0;
           }
+         v=0;
        
-         break;
+     }
          
-  case 'A' :
-    for(uint8 i=1;i<19;i++)
+  else if(buf[0]=='u')
+  {
+    for(i=1;i<19;i++)    //取出数组逗号前面的作为名称
     {
-       
       user_new.name[i]=buf[i]; 
       if(buf[i]==',')
-      {
-        uint8 n=i+1;
+     
       break;
-      }
     }
-    for(;n<i+7;n++)
+    
+    for(n=i+1;n<i+7;n++)//取出从，往后的6位密码
     {
-      Passcode_V=Passcode_V*10+(buf[n]-'0');
+      Passcode_V=Passcode_V*10+(buf[n]-'0');//字符转成uint32格式
       user_new.password=Passcode_V;
     }
-    
-        // 创建用户
-    
-        
-       osal_snv_read(0x81, sizeof(flag), &flag_new);
-      
-        
-        for(uint8 j = 0; j<=MAXPASS ; j++)
+
+    osal_snv_read(0x81, sizeof(flag), &flag_new);//创建用户并写入
+    for(uint8 j = 0; j<=MAXPASS ; j++)
         {
             if (flag_new.flag[j]==0)
             {
                 osal_snv_write(0x82+j, sizeof(user), &user_new);
-                flag_new.flag[j]=1;
+                flag_new.flag[j]=1;   //在0x81 flag中的标志位置为1,说明有效
                 osal_snv_write(0x81, sizeof(flag), &flag_new);
-                SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,7, &sus);
-
-                  break;
+                SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,7, &sus);//返回有效值
+                break;
             }
             
         }
     
-    break;
+  }
+  else if(buf[0]=='d')
+  {
+    deleteID=(buf[1]-'0')*10+(buf[2]-'0');
+    osal_snv_read(0x81, sizeof(flag), &flag_new);//0x81中存着一个flag【20】的数组，第n位为1说明这个位有密码，为0则没有密码
+    flag_new[deleteID]=0;
+    osal_snv_write(0x81, sizeof(flag), &flag_new);   
+  }
+  else if(buf[0]=='a')
+  {
+         for(uint8 j=1;j<7;j++) //数组密码转uint32格式
+           {
+             Passcode_V=Passcode_V*10+(buf[j]-'0');
+           }
+
+         if(flag_new.flag[j]) //该处存在有效密码
+           {
+             osal_snv_read(0x82, sizeof(user), &user_new);//读取密码
+             if(Passcode_V  == user_new.password) //密码正确
+               {
+                 SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,7, &sus);//向信道7传输SUCCESS
+                 admin_access=1;                             //本次允许接入
+                 v=1;
+                 break;
+                }              
+           }
+   
+          if (v==0|admin_access==0)//判断完所有密码全部错误
+          {
+             SimpleProfile_SetParameter( SIMPLEPROFILE_CHAR7,6, &fai); //返回失败
+             admin_access=0;
+          }
+
+    
+  }
     
     
 
@@ -1026,7 +1053,7 @@ static void simpleProfileChangeCB( uint8 paramID )
      }
 */
      break;
-     
+    }    
   case SIMPLEPROFILE_CHAR7:
       SimpleProfile_GetParameter( SIMPLEPROFILE_CHAR7, newChar7Value);
   //    switch newChar7Value[0]

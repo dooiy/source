@@ -97,12 +97,6 @@ typedef struct //Flag_0x81     //标识 是否存在用户
     uint8 flag[MAXPASS]; //存在数组，是否存在用户
 }flag;
 
-typedef struct //admin_0x82    //管理员结构体
-{
-    uint8 name[15];
-    uint32 password;
-}admin;
-
 typedef struct //user_0x8x
 {
     uint8 name[13];
